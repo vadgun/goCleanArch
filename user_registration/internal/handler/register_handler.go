@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
 
 	"github.com/vadgun/goApp/user_registration/internal/entity"
 	"github.com/vadgun/goApp/user_registration/internal/usecase"
+	"github.com/vadgun/goApp/user_registration/pkg"
 )
 
 type UserHandler struct {
@@ -20,45 +20,60 @@ func NewUserHandler(useCase *usecase.RegisterUseCase) *UserHandler {
 }
 
 func (h *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
-	var user entity.User
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodPost {
+		http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var userReq entity.User
+	if err := json.NewDecoder(r.Body).Decode(&userReq); err != nil {
 		http.Error(w, "JSON inválido", http.StatusBadRequest)
 		return
 	}
 
-	var missingFields []string
-
-	if user.User == "" {
-		missingFields = append(missingFields, "usuario")
-	}
-	if user.Email == "" {
-		missingFields = append(missingFields, "correo")
-	}
-	if user.Password == "" {
-		missingFields = append(missingFields, "contraseña")
-	}
-	if user.Phone == "" {
-		missingFields = append(missingFields, "telefono")
-	}
-
+	missingFields := validateRequiredRegisterFields(userReq)
 	if len(missingFields) > 0 {
-		msg := "Falta el campo "
-		if len(missingFields) > 1 {
-			msg = "Faltan los campos "
-		}
-		msg += strings.Join(missingFields, ", ")
-		http.Error(w, msg, http.StatusBadRequest)
+		msg := pkg.CreateMissingFieldsMessage(missingFields)
+		respondWithError(w, msg, http.StatusBadRequest)
 		return
 	}
 
-	err := h.useCase.Register(user)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusConflict)
+	if err := h.useCase.Register(userReq); err != nil {
+		respondWithError(w, err.Error(), http.StatusConflict)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	log.Println("Usuario registrado correctamente", fmt.Sprintf("%+v", user))
+	log.Println("Usuario registrado correctamente", fmt.Sprintf("%+v", userReq))
 
-	w.Write([]byte("Usuario registrado correctamente"))
+	json.NewEncoder(w).Encode(map[string]string{
+		"Mensaje": "Usuario registrado correctamente",
+	})
+}
+
+func respondWithError(w http.ResponseWriter, message string, statusCode int) {
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(map[string]string{
+		"error": message,
+	})
+}
+
+func validateRequiredRegisterFields(registerReq entity.User) []string {
+	var missingFields []string
+
+	if registerReq.User == "" {
+		missingFields = append(missingFields, "usuario")
+	}
+	if registerReq.Email == "" {
+		missingFields = append(missingFields, "correo")
+	}
+	if registerReq.Password == "" {
+		missingFields = append(missingFields, "contraseña")
+	}
+	if registerReq.Phone == "" {
+		missingFields = append(missingFields, "telefono")
+	}
+
+	return missingFields
 }
