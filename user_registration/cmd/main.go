@@ -18,8 +18,13 @@ func main() {
 	loginUseCase := usecase.NewLoginUseCase(repo)
 	loginHandler := handler.NewLoginHandler(loginUseCase)
 
+	externalrepo := repository.NewExternalAPIRepository()
+	fetchUserUseCase := usecase.NewFetchExternalUserUseCase(externalrepo)
+	externalUserHandler := handler.NewExternalUserHandler(fetchUserUseCase)
+
 	http.HandleFunc("/register", registerHandler.Register)
 	http.HandleFunc("/login", loginHandler.Login)
+	http.HandleFunc("/randomuser", externalUserHandler.FetchUserHandler)
 
 	log.Println("Servidor corriendo en :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
